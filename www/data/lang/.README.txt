@@ -1,0 +1,15 @@
+If you're planning on translating the game, all the strings of text are located in the default.txt file.
+You should copy it and rename it to whatever language you're translating to, upon game launch the game will detect the file and provide it as a language option in the config menu.
+Remember, each line corresponds to 1 string of dialogue used in game. Don't add new lines or you'll screw everything up.
+The fonts work exactly as undertale fonts and are exported from undertalemodtool, using gamemaker's font formatting, so the process should be similar to undertale translations (bitmap fonts).
+
+Text formatting:
+
+@ - new line,
+| - for certain dialogue acts as a separator, creating another dialogue box after,
+_ - for certain dialogue acts as a interact separator, example: "Interact 1!_Interact 2!_" when first interacting with object it'll say "Interact 1!", the second time and on it'll say "Interact 2!" and so on.
+[100] - turns text white,
+[0] - turns text red,
+[color=#hexhere] - also changes color,
+<35> - turns text gold
+`Expression name here` - changes expression to the sprite specified,

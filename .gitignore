@@ -1,0 +1,5 @@
+# O workflow gera estas pastas (npm install / npx cap add android); não podem ir para o repositório.
+/node_modules/
+/android/
+__pycache__/
+*.pyc

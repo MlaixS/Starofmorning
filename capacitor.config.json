@@ -1,0 +1,7 @@
+{
+  "appId": "com.morningstar.port",
+  "appName": "Morningstar",
+  "webDir": "www",
+  "server": { "androidScheme": "https" },
+  "android": { "allowMixedContent": false }
+}

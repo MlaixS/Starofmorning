@@ -1,0 +1,8 @@
+{
+  "name": "morningstar-android",
+  "version": "1.0.5",
+  "private": true,
+  "description": "Port Android (Capacitor/WebView) de Morningstar",
+  "scripts": { "test": "node tests/test_vfs.js" },
+  "dependencies": { "@capacitor/android": "8.5.3", "@capacitor/cli": "8.5.3", "@capacitor/core": "8.5.3" }
+}
