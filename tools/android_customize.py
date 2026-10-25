@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Roda DEPOIS de `npx cap add android`: paisagem fixa, tela cheia imersiva, tela sempre acesa,
-área do entalhe (notch), permissões de vibração. Falha em voz alta se o modelo do Capacitor mudar."""
-import json, os, re, sys
+área do entalhe (notch), permissões de vibração, ícone e tela de abertura do app. Falha em voz alta se o modelo do Capacitor mudar."""
+import json, os, re, shutil, sys
 root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 app_id = json.load(open(os.path.join(root, 'capacitor.config.json')))['appId']
 man = os.path.join(root, 'android/app/src/main/AndroidManifest.xml')
@@ -61,4 +61,9 @@ pat = re.search(r"ignoreAssetsPattern\s*=\s*'([^']*)'", g); assert pat, 'ignoreA
 itens = [i for i in pat.group(1).split(':') if i != '.*']
 g = g.replace(pat.group(0), "ignoreAssetsPattern = '" + ':'.join(itens) + "'", 1)
 open(gradle, 'w', encoding='utf-8').write(g)
-print('android customizado: paisagem, imersivo, tela acesa, notch, vibração, arquivos com ponto mantidos')
+# Ícones e tela de abertura do app (gerados por tools/make_icons.py a partir de assets/icon.png)
+res_src, res_dst = os.path.join(root, 'android-res'), os.path.join(root, 'android/app/src/main/res')
+assert os.path.isdir(res_dst), 'pasta res do Android não encontrada'
+if os.path.isdir(res_src): shutil.copytree(res_src, res_dst, dirs_exist_ok=True)
+else: print('aviso: android-res/ ausente; o app fica com o ícone padrão do Capacitor')
+print('android customizado: paisagem, imersivo, tela acesa, notch, vibração, arquivos com ponto mantidos, ícone e splash')

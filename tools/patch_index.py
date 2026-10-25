@@ -9,8 +9,8 @@ def once(old, new):
     global h
     assert h.count(old) == 1, f'âncora ausente/duplicada ({h.count(old)}x): {old[:60]}'
     h = h.replace(old, new)
-# 1) shim + extras ANTES do runtime (script.js); 2) controles de toque depois
-once('<script src="script.js"', '<script src="ms-android/vfs-shim.js"></script>\n<script src="ms-android/ms-extras.js"></script>\n<script src="script.js"')
+# 1) shim + extras + desempenho ANTES do runtime (script.js); 2) controles de toque depois
+once('<script src="script.js"', '<script src="ms-android/vfs-shim.js"></script>\n<script src="ms-android/ms-extras.js"></script>\n<script src="ms-android/perf.js"></script>\n<script src="script.js"')
 once('</body>', '<script src="ms-android/touch-controls.js"></script>\n</body>')
 # 3) só inicia o jogo depois que o disco virtual estiver pronto (manifesto + saves carregados)
 once('run().catch(handleError);', '(window.MSVFS ? window.MSVFS.ready : Promise.resolve()).then(run).catch(handleError);')

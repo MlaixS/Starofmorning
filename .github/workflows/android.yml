@@ -15,6 +15,14 @@ jobs:
       - run: npx cap add android
       - run: python3 tools/android_customize.py
       - run: npx cap sync android
+      - name: Assinatura fixa (o APK novo instala por cima do antigo, sem apagar os saves)
+        run: mkdir -p ~/.android && cp tools/debug.keystore ~/.android/debug.keystore
       - run: cd android && chmod +x gradlew && ./gradlew assembleDebug
+      - name: Conferir assinatura (os dois SHA-256 abaixo devem ser iguais)
+        continue-on-error: true
+        run: |
+          APKSIGNER=$(ls "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)
+          echo "APK:"; "$APKSIGNER" verify --print-certs android/app/build/outputs/apk/debug/app-debug.apk | grep "SHA-256"
+          echo "keystore:"; keytool -list -keystore tools/debug.keystore -storepass android -alias androiddebugkey | grep -i "SHA-256\|SHA256"
       - uses: actions/upload-artifact@v4
         with: { name: Morningstar-APK, path: android/app/build/outputs/apk/debug/app-debug.apk }

@@ -29,7 +29,7 @@
     p: { dir: [0.22, 0.80], z: [0.88, 0.76], x: [0.72, 0.88], c: [0.72, 0.68], shift: [0.88, 0.60], enter: [0.88, 0.50], esc: [0.12, 0.50], ctrl: [0.72, 0.50] }
   };
   const DEFAULTS = {
-    v: 1, enabled: 'auto', mode: 'dpad', opacity: 0.6, size: 1, haptics: true, hideWithGamepad: true, leftHanded: false,
+    v: 1, enabled: 'auto', mode: 'dpad', skin: 'ut', opacity: 0.6, size: 1, haptics: true, hideWithGamepad: true, leftHanded: false,
     show: { z: true, x: true, c: true, shift: true, enter: true, esc: true, ctrl: false }, pos: { l: {}, p: {} }, scale: {}
   };
   const STORE_KEY = 'morningstar-touch-v1';
@@ -41,6 +41,7 @@
     if (!raw || typeof raw !== 'object') return s;
     if (['auto', 'on', 'off'].includes(raw.enabled)) s.enabled = raw.enabled;
     if (['dpad', 'stick'].includes(raw.mode)) s.mode = raw.mode;
+    if (['ut', 'classic'].includes(raw.skin)) s.skin = raw.skin;
     if (num(raw.opacity)) s.opacity = clamp(raw.opacity, 0.15, 1);
     if (num(raw.size)) s.size = clamp(raw.size, 0.6, 1.6);
     for (const k of ['haptics', 'hideWithGamepad', 'leftHanded']) if (typeof raw[k] === 'boolean') s[k] = raw[k];
@@ -88,21 +89,31 @@
     Object.defineProperty(ev, 'which', { get: () => def.kc });
     document.dispatchEvent(ev); // alvo = document, como o jogo exige; sobe até window
   }
-  // Um toque rápido (20–40 ms) pode caber entre dois quadros do Scratch e ser ignorado.
-  // Por isso a tecla fica pressionada pelo menos MIN_HOLD ms (um teclado físico leva ~60–100 ms).
-  const MIN_HOLD = 70, downAt = {}, pendingUp = {};
+  // O jogo lê as teclas a cada passo (30/s). Se ele engasga (cena pesada), um toque curto cai entre dois
+  // passos e se perde: era preciso segurar o botão por 1–2 s. Por isso a tecla só é solta depois que o jogo
+  // executou MIN_STEPS passos com ela pressionada (e MIN_HOLD ms), com teto de MAX_HOLD ms para nunca travar.
+  const MIN_HOLD = 70, MIN_STEPS = 2, MAX_HOLD = 2500, downAt = {}, downStep = {}, pendingUp = {};
+  let steps = 0, stepHooked = false, hookTries = 0;
+  const upReady = (n) => { const age = Date.now() - downAt[n]; return age >= MAX_HOLD || (age >= MIN_HOLD && (!stepHooked || steps - downStep[n] >= MIN_STEPS)); };
+  function finishUp(n) { clearTimeout(pendingUp[n]); pendingUp[n] = null; if (!held[n]) fire(KEYS[n], false); }
+  function hookSteps() {
+    const rt = root.vm && root.vm.runtime;
+    if (!rt || !rt.on) return false;
+    rt.on('AFTER_EXECUTE', () => { steps++; for (const n in pendingUp) if (pendingUp[n] && upReady(n)) finishUp(n); });
+    return (stepHooked = true);
+  }
   function press(name) {
     held[name] = (held[name] || 0) + 1;
     if (pendingUp[name]) { clearTimeout(pendingUp[name]); pendingUp[name] = null; return; } // ainda estava "solta em breve": segue pressionada
-    if (held[name] === 1) { downAt[name] = Date.now(); fire(KEYS[name], true); }
+    if (held[name] === 1) { downAt[name] = Date.now(); downStep[name] = steps; fire(KEYS[name], true); }
   }
   function release(name, now) {
     if (!held[name]) return;
     held[name]--;
     if (held[name] !== 0) return;
-    const wait = now ? 0 : Math.max(0, MIN_HOLD - (Date.now() - downAt[name]));
-    if (wait === 0) fire(KEYS[name], false);
-    else pendingUp[name] = setTimeout(() => { pendingUp[name] = null; if (!held[name]) fire(KEYS[name], false); }, wait);
+    if (now || upReady(name)) { fire(KEYS[name], false); return; }
+    const age = Date.now() - downAt[name];
+    pendingUp[name] = setTimeout(() => finishUp(name), Math.max(0, (stepHooked ? MAX_HOLD : MIN_HOLD) - age));
   }
   function setDirs(next) {
     for (const n of ['up', 'down', 'left', 'right']) {
@@ -149,6 +160,7 @@
     }
     layer.style.setProperty('--ms-o', editing ? Math.max(S.opacity, 0.85) : S.opacity);
     layer.classList.toggle('stick', S.mode === 'stick');
+    for (const e of [layer, ui]) e.classList.toggle('skin-ut', S.skin === 'ut');
   }
   function shouldShow() {
     if (S.enabled === 'off') return false;
@@ -254,6 +266,10 @@
     const seg = h('span', 'seg'), bd = h('button', '', 'D-pad'), bs = h('button', '', 'Analógico');
     bd.addEventListener('click', () => { S.mode = 'dpad'; save(); refresh(); seg._sync(); }); bs.addEventListener('click', () => { S.mode = 'stick'; save(); refresh(); seg._sync(); });
     seg.append(bd, bs); seg._sync = () => { bd.classList.toggle('act', S.mode === 'dpad'); bs.classList.toggle('act', S.mode === 'stick'); };
+    const skinSeg = h('span', 'seg'), bu = h('button', '', 'Undertale'), bcl = h('button', '', 'Clássico');
+    bu.addEventListener('click', () => { S.skin = 'ut'; save(); refresh(); skinSeg._sync(); }); bcl.addEventListener('click', () => { S.skin = 'classic'; save(); refresh(); skinSeg._sync(); });
+    skinSeg.append(bu, bcl); skinSeg._sync = () => { bu.classList.toggle('act', S.skin === 'ut'); bcl.classList.toggle('act', S.skin === 'classic'); };
+    const perf = root.MSPerf && root.MSPerf.panelSection ? root.MSPerf.panelSection() : null;
     const op = slider(15, 100, () => S.opacity, (v) => { S.opacity = clamp(v, 0.15, 1); }, (v) => v + '%');
     const sz = slider(60, 160, () => S.size, (v) => { S.size = clamp(v, 0.6, 1.6); }, (v) => v + '%');
     const cks = [checkbox('Vibrar ao tocar', () => S.haptics, (v) => { S.haptics = v; }),
@@ -268,9 +284,9 @@
     bReset.addEventListener('click', () => { if (root.confirm('Restaurar todos os ajustes dos controles de toque?')) { S = mergeSettings(null); save(); syncAll(); refresh(); } });
     bClose.addEventListener('click', closePanel);
     act.append(bEdit, bReset, bClose);
-    const all = [en, seg, op, sz].concat(cks, bks); sync.push(...all);
+    const all = [en, seg, skinSeg, op, sz].concat(cks, bks, perf ? [perf] : []); sync.push(...all);
     function syncAll() { sync.forEach((x) => x._sync()); }
-    card.append(h('h2', '', 'Controles de toque'), row('Mostrar', en), row('Direcional', seg), row('Opacidade', op), row('Tamanho', sz), ...cks, fs, act, h('p', 'note', 'Tudo é salvo neste aparelho. Paisagem e retrato têm posições separadas.'));
+    card.append(h('h2', '', 'Controles de toque'), row('Mostrar', en), row('Direcional', seg), row('Estilo', skinSeg), row('Opacidade', op), row('Tamanho', sz), ...cks, fs, ...(perf ? [h('h2', 'sec', 'Desempenho'), perf] : []), act, h('p', 'note', 'Tudo é salvo neste aparelho. Paisagem e retrato têm posições separadas.'));
     panel.append(card); panel._sync = syncAll;
     panel.addEventListener('pointerdown', (e) => { if (e.target === panel) closePanel(); });
   }
@@ -286,7 +302,47 @@
     bar.append(h('span', 'hint', 'Arraste para mover · '), name, h('span', '', ' tamanho '), r, rst, done);
   }
 
+  /* ------------------------------------------- visual Undertale (pixel-art) -- */
+  // Pixel-art em SVG de retângulos, sem suavização; desenhada para este port (não usa arquivos do jogo original).
+  const pix = (rows, color) => {
+    let d = '';
+    rows.forEach((r, y) => { for (const k of r.matchAll(/X+/g)) d += 'M' + k.index + ' ' + y + 'h' + k[0].length + 'v1h-' + k[0].length + 'z'; });
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + rows[0].length + ' ' + rows.length + '" shape-rendering="crispEdges"><path fill="' + color + '" d="' + d + '"/></svg>';
+    return 'url("data:image/svg+xml,' + encodeURIComponent(svg) + '")';
+  };
+  const HEART = ['.XX...XX.', 'XXXX.XXXX', 'XXXXXXXXX', 'XXXXXXXXX', '.XXXXXXX.', '..XXXXX..', '...XXX...', '....X....'];
+  const ARROW = { up: ['...X...', '..XXX..', '.XXXXX.', 'XXXXXXX'], down: ['XXXXXXX', '.XXXXX.', '..XXX..', '...X...'], left: ['...X', '..XX', '.XXX', 'XXXX', '.XXX', '..XX', '...X'], right: ['X...', 'XX..', 'XXX.', 'XXXX', 'XXX.', 'XX..', 'X...'] };
+  const PLUS = 'url("data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 60 60" shape-rendering="crispEdges"><path d="M20 2h20v18h18v20H40v18H20V40H2V20h18z" fill="#000" stroke="#fff" stroke-width="3"/></svg>') + '")';
+  const HR = pix(HEART, '#ff0000'), FONT = 'MSDetermination,"Courier New",monospace';
+  const arrows = ['up', 'down', 'left', 'right'].map((d) => {
+    const sz = d === 'up' || d === 'down' ? '62% auto' : 'auto 62%';
+    return '.skin-ut .ms-dir .' + d + '{background-image:' + pix(ARROW[d], '#ffffff') + ';background-size:' + sz + '}' +
+      '.skin-ut .ms-dir.on-' + d + ' .' + d + '{background-image:' + pix(ARROW[d], '#ffff00') + ';transform:none;text-shadow:none}';
+  }).join('');
+  const UT_CSS = `
+  .skin-ut .ms-btn{border:3px solid var(--c,#fff);border-radius:0;background:#000;color:var(--c,#fff);box-shadow:0 0 0 3px #000;font-family:${FONT};font-weight:400;text-shadow:none;letter-spacing:.02em;line-height:1;image-rendering:pixelated}
+  .skin-ut .ms-btn[data-id=z]{--c:#ff9a22}.skin-ut .ms-btn[data-id=c]{--c:#42fcff}
+  .skin-ut .ms-btn.on{background:#000;border-color:#ff0;color:#ff0;transform:scale(.94)}
+  .skin-ut .ms-btn.on:not(.small)::before{content:"";display:inline-block;width:.62em;height:.55em;margin-right:.3em;background:${HR} center/contain no-repeat}
+  .skin-ut .ms-dir .base{border:0;border-radius:0;background:${PLUS} center/100% 100% no-repeat}
+  .skin-ut .ms-dir .arr{font-size:0;color:transparent;text-shadow:none;background-position:center;background-repeat:no-repeat}
+  ${arrows}
+  .skin-ut.stick .ms-dir .base{background:#000;border:4px solid #fff;border-radius:50%}.skin-ut.stick .ms-dir .arr{opacity:.25}
+  .skin-ut .ms-dir .knob{background:${HR} center/contain no-repeat;border:0;border-radius:0;width:30%;height:27%}
+  .skin-ut .ms-gear{border:3px solid #fff;border-radius:0;background:#000;font-family:${FONT}}
+  .skin-ut .ms-panel .card{background:#000;border:4px solid #fff;border-radius:0;box-shadow:none;font-family:${FONT};font-size:18px}
+  .skin-ut .ms-panel h2{font-weight:400;font-size:24px}.skin-ut .ms-panel h2::before{content:"* "}
+  .skin-ut .ms-panel select,.skin-ut .ms-panel button{background:#000;border:2px solid #fff;border-radius:0;color:#fff;font:inherit;font-size:17px}
+  .skin-ut .ms-panel .seg button,.skin-ut .ms-panel .seg button:first-child,.skin-ut .ms-panel .seg button:last-child{border-radius:0}
+  .skin-ut .ms-panel .act{background:#000;border-color:#ff0;color:#ff0}
+  .skin-ut .ms-panel .seg .act::before{content:"";display:inline-block;width:.7em;height:.62em;margin-right:.35em;background:${HR} center/contain no-repeat}
+  .skin-ut .ms-panel .pri{background:#000;border-color:#ff9a22;color:#ff9a22}
+  .skin-ut .ms-panel input[type=checkbox]{accent-color:#f00}.skin-ut .ms-panel input[type=range]{accent-color:#ff0}.skin-ut .ms-panel .note{opacity:.75}
+  .skin-ut .ms-bar{background:#000;border:3px solid #fff;border-radius:0;font-family:${FONT}}
+  .skin-ut .ms-bar button{background:#000;border:2px solid #fff;border-radius:0;color:#fff;font:inherit;font-size:16px}.skin-ut .ms-bar .pri{border-color:#ff9a22;color:#ff9a22}`;
+
   const CSS = `
+  @font-face{font-family:MSDetermination;src:url(assets/689cda6ac1fe62d63cc6e37e9dc0f9d0.woff) format("woff");font-display:swap}
   .ms-layer,.ms-ui{position:fixed;inset:0;pointer-events:none;z-index:2147483000;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;font-family:system-ui,sans-serif}
   .ms-c{position:absolute;pointer-events:auto;touch-action:none;opacity:var(--ms-o,.6);-webkit-tap-highlight-color:transparent;color:#fff;box-sizing:border-box}
   .ms-btn{border-radius:50%;background:rgba(40,40,60,.78);border:2px solid rgba(255,255,255,.85);display:flex;align-items:center;justify-content:center;font-weight:700;text-shadow:0 1px 2px #000}
@@ -313,7 +369,7 @@
 
   /* ---------------------------------------------------------- iniciar -- */
   function start() {
-    const st = h('style'); st.textContent = CSS; document.head.append(st);
+    const st = h('style'); st.textContent = CSS + UT_CSS; document.head.append(st);
     probe = h('div'); probe.style.cssText = 'position:fixed;visibility:hidden;pointer-events:none;inset:0;padding:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px) env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px)';
     layer = h('div', 'ms-layer'); ui = h('div', 'ms-ui');
     layer.append(buildDir()); BUTTONS.forEach((b) => layer.append(buildButton(b)));
@@ -330,8 +386,9 @@
     root.addEventListener('blur', releaseAll);
     document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') releaseAll(); });
     countPads();
+    const hk = setInterval(() => { if (hookSteps() || ++hookTries > 3000) clearInterval(hk); }, 100); // espera o vm existir (até 5 min)
   }
 
-  root.MSTouch = { open: () => panel && openPanel(), close: () => panel && closePanel(), release: () => releaseAll(), settings: () => S, _pure: pure };
+  root.MSTouch = { open: () => panel && openPanel(), close: () => panel && closePanel(), release: () => releaseAll(), settings: () => S, steps: () => steps, stepHooked: () => stepHooked, _pure: pure };
   if (document.body) start(); else document.addEventListener('DOMContentLoaded', start);
 })(typeof window !== 'undefined' ? window : globalThis);

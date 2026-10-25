@@ -18,6 +18,12 @@ with sync_playwright() as p:
     pg.evaluate("window.__k=[];['keydown','keyup'].forEach(t=>document.addEventListener(t,e=>window.__k.push([t,e.key,Math.round(performance.now())])))")
     rect = lambda sel: pg.evaluate(f"(()=>{{const r=document.querySelector('{sel}').getBoundingClientRect();return [r.left+r.width/2,r.top+r.height/2,r.width/2]}})()")
     keys = lambda: pg.evaluate("window.__k.splice(0)")
+    def until(pred, timeout=4.0):  # junta eventos até a condição valer (a tecla só é solta depois que o jogo a enxergou)
+        got = []; t0 = time.time()
+        while time.time() - t0 < timeout:
+            time.sleep(.1); got += keys()
+            if pred(got): break
+        return got
     def touch(t, pts): cdp.send('Input.dispatchTouchEvent', {'type': t, 'touchPoints': [{'x': x, 'y': y, 'id': i} for i, (x, y) in enumerate(pts)]})
     print('direcional')
     cx, cy, R = rect('.ms-dir')
@@ -25,14 +31,14 @@ with sync_playwright() as p:
     check('D-pad: direita -> só ArrowRight', [x[1] for x in k if x[0] == 'keydown'] == ['ArrowRight'], k)
     touch('touchMove', [(cx + R * .6, cy - R * .6)]); time.sleep(.15); k = keys()
     check('diagonal: ArrowUp pressionada e ArrowRight continua', [x[1] for x in k] == ['keydown'.replace('keydown', 'ArrowUp')] or [x[1] for x in k] == ['ArrowUp'], k)
-    touch('touchEnd', []); time.sleep(.2); k = keys()
+    touch('touchEnd', []); k = until(lambda g: len([x for x in g if x[0] == 'keyup']) >= 2)
     check('soltar: todas as setas soltas', sorted(x[1] for x in k if x[0] == 'keyup') == ['ArrowRight', 'ArrowUp'], k)
     print('botões')
     zx, zy, _ = rect('.ms-btn[data-id=z]'); xx, xy, _ = rect('.ms-btn[data-id=x]')
     touch('touchStart', [(zx, zy), (xx, xy)]); time.sleep(.2); k = keys()
     check('multitoque: Z e X juntos', sorted(x[1] for x in k if x[0] == 'keydown') == ['x', 'z'], k)
-    touch('touchEnd', []); time.sleep(.2); keys()
-    touch('touchStart', [(zx, zy)]); time.sleep(.01); touch('touchEnd', []); time.sleep(.3); k = keys()
+    touch('touchEnd', []); until(lambda g: len([x for x in g if x[0] == 'keyup']) >= 2)
+    touch('touchStart', [(zx, zy)]); time.sleep(.01); touch('touchEnd', []); k = until(lambda g: any(x[0] == 'keyup' for x in g))
     dn = [x for x in k if x[0] == 'keydown']; up = [x for x in k if x[0] == 'keyup']
     check('toque de 10 ms mantém a tecla >= 60 ms', dn and up and up[0][2] - dn[0][2] >= 60, k)
     print('painel e editor')
